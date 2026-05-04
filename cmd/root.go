@@ -48,14 +48,6 @@ var rootCmd = &cobra.Command{
 		spotifyPlayer = player.New(spotifyClient)
 		return nil
 	},
-	PersistentPostRunE: func(cmd *cobra.Command, args []string) error {
-		if cmd.Name() == "init" || cmd.Name() == "settings" || spotifyClient == nil {
-			return nil
-		}
-		// Save token in case it was refreshed during this session
-		_ = auth.PersistToken()
-		return nil
-	},
 }
 
 func init() {

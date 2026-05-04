@@ -7,8 +7,10 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/http"
+	"os"
 	"os/exec"
 	"runtime"
+	"sync"
 
 	"github.com/T4ko0522/spotify-cli/internal/config"
 	spotifyauth "github.com/zmb3/spotify/v2/auth"
@@ -134,8 +136,6 @@ func Login() error {
 	return nil
 }
 
-var currentTokenSource oauth2.TokenSource
-
 func openBrowser(url string) error {
 	switch runtime.GOOS {
 	case "darwin":
@@ -160,25 +160,76 @@ func oauthConfig() *oauth2.Config {
 	}
 }
 
-// GetClient returns an HTTP client with automatic token refresh.
+// GetClient returns an HTTP client whose token source automatically
+// refreshes and persists tokens to disk under an inter-process lock.
 func GetClient(ctx context.Context) (*http.Client, error) {
 	token, err := LoadToken()
 	if err != nil {
 		return nil, err
 	}
-	cfg := oauthConfig()
-	currentTokenSource = cfg.TokenSource(ctx, token)
-	return oauth2.NewClient(ctx, currentTokenSource), nil
+	src := &persistingTokenSource{
+		ctx:     ctx,
+		cfg:     oauthConfig(),
+		current: token,
+	}
+	return oauth2.NewClient(ctx, src), nil
 }
 
-// PersistToken saves the current (possibly refreshed) token to disk.
-func PersistToken() error {
-	if currentTokenSource == nil {
-		return nil
+// persistingTokenSource serializes Spotify PKCE token refreshes across
+// concurrent processes. PKCE rotates the refresh token on each refresh,
+// so two `spt` processes that load the same token and both attempt to
+// refresh will invalidate each other's refresh token. We avoid that by
+// taking a file lock for any refresh, re-reading the latest token from
+// disk under the lock, and atomically writing the result back before
+// releasing the lock.
+type persistingTokenSource struct {
+	ctx     context.Context
+	cfg     *oauth2.Config
+	mu      sync.Mutex
+	current *oauth2.Token
+}
+
+func (p *persistingTokenSource) Token() (*oauth2.Token, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if p.current != nil && p.current.Valid() {
+		return p.current, nil
 	}
-	token, err := currentTokenSource.Token()
+
+	lock, err := acquireTokenLock()
 	if err != nil {
-		return nil
+		return nil, err
 	}
-	return SaveToken(token)
+	defer func() { _ = lock.Release() }()
+
+	diskTok, err := LoadToken()
+	if err != nil {
+		return nil, err
+	}
+
+	// Another process may have already refreshed while we were waiting
+	// for the lock. If the on-disk token is still valid, just use it.
+	if diskTok.Valid() {
+		p.current = diskTok
+		return diskTok, nil
+	}
+
+	src := p.cfg.TokenSource(p.ctx, diskTok)
+	fresh, err := src.Token()
+	if err != nil {
+		return nil, fmt.Errorf("token refresh failed; run 'spt init' to re-authenticate: %w", err)
+	}
+
+	if err := SaveToken(fresh); err != nil {
+		// The refresh succeeded so the in-memory token is usable for
+		// this invocation, but the rotated refresh token is now lost
+		// from disk. Warn the user that the next run will likely need
+		// re-authentication, instead of silently swallowing the error.
+		fmt.Fprintf(os.Stderr, "warning: token refreshed but failed to persist: %v\n", err)
+		fmt.Fprintln(os.Stderr, "the next 'spt' invocation may require 'spt init' to re-authenticate")
+	}
+
+	p.current = fresh
+	return fresh, nil
 }
