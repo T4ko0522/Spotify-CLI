@@ -99,10 +99,19 @@ jobs:
       - name: Build MSI
         run: wix build installer/spt.wxs -o installer/spt-${{ env.VERSION }}.msi -b installer -d Version=${{ steps.msi-ver.outputs.msi_version }}
 
+      - name: Create Windows zip
+        shell: pwsh
+        run: Compress-Archive -Path installer/spt.exe -DestinationPath "installer/spt-${{ env.VERSION }}-windows-amd64.zip"
+
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: spt-windows-msi
           path: installer/spt-${{ env.VERSION }}.msi
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: spt-windows-zip
+          path: installer/spt-${{ env.VERSION }}-windows-amd64.zip
 
   release:
     needs: [version, build-linux, build-msi]
@@ -112,11 +121,25 @@ jobs:
     runs-on: ubuntu-latest
     env:
       VERSION: ${{ needs.version.outputs.version }}
+    outputs:
+      sha_linux_amd64: ${{ steps.shas.outputs.linux_amd64 }}
+      sha_linux_arm64: ${{ steps.shas.outputs.linux_arm64 }}
+      sha_windows_amd64: ${{ steps.shas.outputs.windows_amd64 }}
     steps:
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: artifacts
           merge-multiple: true
+
+      - name: Compute SHA256
+        id: shas
+        run: |
+          cd artifacts
+          {
+            echo "linux_amd64=$(sha256sum "spt-${VERSION}-linux-amd64.tar.gz" | awk '{print $1}')"
+            echo "linux_arm64=$(sha256sum "spt-${VERSION}-linux-arm64.tar.gz" | awk '{print $1}')"
+            echo "windows_amd64=$(sha256sum "spt-${VERSION}-windows-amd64.zip" | awk '{print $1}')"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
@@ -127,3 +150,116 @@ jobs:
           draft: false
           prerelease: false
           overwrite_files: true
+
+  bump-scoop:
+    needs: [version, release]
+    permissions: {}
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      SHA_WIN: ${{ needs.release.outputs.sha_windows_amd64 }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: T4ko0522/scoop-bucket
+          token: ${{ secrets.BUCKET_TOKEN }}
+
+      - name: Update manifest
+        run: |
+          VERSION_NO_V="${VERSION#v}"
+          mkdir -p bucket
+          cat > bucket/spt.json <<EOF
+          {
+              "version": "${VERSION_NO_V}",
+              "description": "Control Spotify from your terminal. TUI + CLI.",
+              "homepage": "https://github.com/T4ko0522/Spotify-CLI",
+              "license": "Apache-2.0",
+              "architecture": {
+                  "64bit": {
+                      "url": "https://github.com/T4ko0522/Spotify-CLI/releases/download/${VERSION}/spt-${VERSION}-windows-amd64.zip",
+                      "hash": "${SHA_WIN}"
+                  }
+              },
+              "bin": "spt.exe",
+              "checkver": "github",
+              "autoupdate": {
+                  "architecture": {
+                      "64bit": {
+                          "url": "https://github.com/T4ko0522/Spotify-CLI/releases/download/v\$version/spt-v\$version-windows-amd64.zip"
+                      }
+                  }
+              }
+          }
+          EOF
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add bucket/spt.json
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "spt: ${VERSION}"
+          git push
+
+  bump-homebrew:
+    needs: [version, release]
+    permissions: {}
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      SHA_LINUX_AMD64: ${{ needs.release.outputs.sha_linux_amd64 }}
+      SHA_LINUX_ARM64: ${{ needs.release.outputs.sha_linux_arm64 }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: T4ko0522/homebrew-tap
+          token: ${{ secrets.BUCKET_TOKEN }}
+
+      - name: Update formula
+        run: |
+          VERSION_NO_V="${VERSION#v}"
+          mkdir -p Formula
+          cat > Formula/spt.rb <<EOF
+          class Spt < Formula
+            desc "Control Spotify from your terminal. TUI + CLI"
+            homepage "https://github.com/T4ko0522/Spotify-CLI"
+            version "${VERSION_NO_V}"
+            license "Apache-2.0"
+
+            on_linux do
+              on_intel do
+                url "https://github.com/T4ko0522/Spotify-CLI/releases/download/${VERSION}/spt-${VERSION}-linux-amd64.tar.gz"
+                sha256 "${SHA_LINUX_AMD64}"
+              end
+              on_arm do
+                url "https://github.com/T4ko0522/Spotify-CLI/releases/download/${VERSION}/spt-${VERSION}-linux-arm64.tar.gz"
+                sha256 "${SHA_LINUX_ARM64}"
+              end
+            end
+
+            def install
+              bin.install "spt"
+            end
+
+            test do
+              system bin/"spt", "--help"
+            end
+          end
+          EOF
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/spt.rb
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "spt: ${VERSION}"
+          git push
