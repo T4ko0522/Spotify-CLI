@@ -1,6 +1,6 @@
 module github.com/T4ko0522/spotify-cli
 
-// AppVersion v1.1.1
+// AppVersion v1.1.2
 
 go 1.25.0
 
