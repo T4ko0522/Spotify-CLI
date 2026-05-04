@@ -153,13 +153,26 @@ func readConfig(path string) (configData, error) {
 // writeConfigAtomic writes cfg to path using a sibling temp file and a
 // rename, so concurrent readers never see a partially-written file and
 // a crash mid-write cannot leave the config truncated.
+//
+// If path is a symlink (a common dotfile-management pattern), the
+// rename is performed against the resolved target rather than the link
+// itself, otherwise rename would replace the symlink with a regular
+// file and silently break the user's setup.
 func writeConfigAtomic(path string, cfg configData) error {
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return fmt.Errorf("cannot marshal config: %w", err)
 	}
 
-	dir := filepath.Dir(path)
+	target, err := resolveWriteTarget(path)
+	if err != nil {
+		return fmt.Errorf("cannot resolve config path: %w", err)
+	}
+
+	// Place the temp file in the target's directory so the rename is
+	// guaranteed to be intra-filesystem (rename(2) returns EXDEV across
+	// filesystems, which would break atomicity).
+	dir := filepath.Dir(target)
 	tmp, err := os.CreateTemp(dir, "config-*.json.tmp")
 	if err != nil {
 		return fmt.Errorf("cannot create temp config file: %w", err)
@@ -188,9 +201,40 @@ func writeConfigAtomic(path string, cfg configData) error {
 		return fmt.Errorf("cannot close temp config file: %w", err)
 	}
 
-	if err := os.Rename(tmpPath, path); err != nil {
+	if err := os.Rename(tmpPath, target); err != nil {
 		return fmt.Errorf("cannot rename config file: %w", err)
 	}
 	committed = true
 	return nil
+}
+
+// resolveWriteTarget walks symlinks at path until it finds a regular
+// file or a non-existent entry, returning the path that should be
+// written to. A non-existent final path is fine — it just means the
+// caller is creating the file for the first time. Unlike
+// filepath.EvalSymlinks, this also handles broken symlinks (which
+// EvalSymlinks rejects) by following the literal link target.
+func resolveWriteTarget(path string) (string, error) {
+	const maxLinks = 40
+	for i := 0; i < maxLinks; i++ {
+		info, err := os.Lstat(path)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return path, nil
+			}
+			return "", err
+		}
+		if info.Mode()&os.ModeSymlink == 0 {
+			return path, nil
+		}
+		link, err := os.Readlink(path)
+		if err != nil {
+			return "", err
+		}
+		if !filepath.IsAbs(link) {
+			link = filepath.Join(filepath.Dir(path), link)
+		}
+		path = link
+	}
+	return "", fmt.Errorf("too many symbolic links resolving config path")
 }
