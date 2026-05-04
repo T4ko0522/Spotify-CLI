@@ -70,7 +70,16 @@ func Save(clientID string) error {
 	if err != nil {
 		return err
 	}
-	data, err := json.MarshalIndent(configData{ClientID: clientID}, "", "  ")
+
+	// Merge with existing config so unrelated fields (e.g. img_size) are
+	// preserved when only the client ID is being updated.
+	var cfg configData
+	if existing, err := os.ReadFile(path); err == nil {
+		_ = json.Unmarshal(existing, &cfg)
+	}
+	cfg.ClientID = clientID
+
+	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return fmt.Errorf("cannot marshal config: %w", err)
 	}
