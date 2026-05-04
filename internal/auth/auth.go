@@ -77,21 +77,21 @@ func Login() error {
 	mux.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
 		if s := r.URL.Query().Get("state"); s != state {
 			errCh <- fmt.Errorf("state mismatch")
-			fmt.Fprint(w, "State mismatch. Please try again.")
+			_, _ = fmt.Fprint(w, "State mismatch. Please try again.")
 			return
 		}
 		if e := r.URL.Query().Get("error"); e != "" {
 			errCh <- fmt.Errorf("authorization denied: %s", e)
-			fmt.Fprintf(w, "Authorization denied: %s", e)
+			_, _ = fmt.Fprintf(w, "Authorization denied: %s", e)
 			return
 		}
 		code := r.URL.Query().Get("code")
 		if code == "" {
 			errCh <- fmt.Errorf("no code in callback")
-			fmt.Fprint(w, "No authorization code received.")
+			_, _ = fmt.Fprint(w, "No authorization code received.")
 			return
 		}
-		fmt.Fprint(w, "Login successful! You can close this tab.")
+		_, _ = fmt.Fprint(w, "Login successful! You can close this tab.")
 		codeCh <- code
 	})
 

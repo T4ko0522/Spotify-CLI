@@ -214,7 +214,7 @@ func (m Model) View() string {
 			limit = len(textLines)
 		}
 		for i := 0; i < limit; i++ {
-			b.WriteString(fmt.Sprintf("\033[%dG", col))
+			fmt.Fprintf(&b, "\033[%dG", col)
 			line := textLines[i]
 			// スペースパディングで前フレームの残像を上書き
 			pad := textWidth - lipgloss.Width(line)
@@ -227,7 +227,7 @@ func (m Model) View() string {
 
 		// 画像行の残りを埋める（テキスト行が足りない場合）
 		for i := len(textLines); i < m.imgRows; i++ {
-			b.WriteString(fmt.Sprintf("\033[%dG", col))
+			fmt.Fprintf(&b, "\033[%dG", col)
 			b.WriteString(strings.Repeat(" ", textWidth))
 			b.WriteString("\n")
 		}

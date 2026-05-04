@@ -39,7 +39,7 @@ func Fetch(trackName, artistName string, durationMs int) (*Result, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch lyrics: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, fmt.Errorf("lyrics not found")

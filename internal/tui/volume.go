@@ -155,7 +155,7 @@ func (m volumeModel) View() string {
 	const barWidth = 25
 	filled := m.volume * barWidth / 100
 	bar := strings.Repeat("#", filled) + strings.Repeat("-", barWidth-filled)
-	b.WriteString(fmt.Sprintf("[%s] %d/100\n", bar, m.volume))
+	fmt.Fprintf(&b, "[%s] %d/100\n", bar, m.volume)
 
 	b.WriteString("\n")
 	b.WriteString(volHelpStyle.Render("Arrows: adjust  0-9: type value  Enter: confirm  q: quit"))
