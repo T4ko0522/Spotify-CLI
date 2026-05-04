@@ -13,11 +13,14 @@ var nextCmd = &cobra.Command{
 	Aliases: []string{"n"},
 	Short:   "Skip to next track",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := spotifyPlayer.Next(cmd.Context()); err != nil {
+		ctx := cmd.Context()
+		if err := runWithDeviceSelection(ctx, spotifyPlayer, func() error {
+			return spotifyPlayer.Next(ctx)
+		}); err != nil {
 			return err
 		}
 		time.Sleep(500 * time.Millisecond)
-		playing, err := spotifyPlayer.NowPlaying(cmd.Context())
+		playing, err := spotifyPlayer.NowPlaying(ctx)
 		if err != nil {
 			fmt.Println("Skipped to next track.")
 			return nil

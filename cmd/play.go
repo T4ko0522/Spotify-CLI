@@ -13,7 +13,11 @@ var playCmd = &cobra.Command{
 	Aliases: []string{"p"},
 	Short:   "Resume playback",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := spotifyPlayer.Play(cmd.Context()); err != nil {
+		ctx := cmd.Context()
+		err := runWithDeviceSelection(ctx, spotifyPlayer, func() error {
+			return spotifyPlayer.Play(ctx)
+		})
+		if err != nil {
 			if errors.Is(err, player.ErrAlreadyPlaying) {
 				fmt.Println("Already playing.")
 				return nil

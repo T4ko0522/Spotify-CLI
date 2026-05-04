@@ -12,6 +12,21 @@ import (
 var ErrAlreadyPlaying = errors.New("already playing")
 var ErrAlreadyPaused = errors.New("already paused")
 
+// AmbiguousDeviceError is returned by EnsureDevice when no device is
+// currently active and more than one is available, so the player can't
+// pick one safely on its own. The package is intentionally I/O-free —
+// the caller (CLI or TUI) decides how to surface the choice and is
+// expected to call TransferPlayback with the picked device. This is
+// what lets the TUI invoke player methods without fighting bubbletea
+// over stdin.
+type AmbiguousDeviceError struct {
+	Devices []spotify.PlayerDevice
+}
+
+func (e *AmbiguousDeviceError) Error() string {
+	return fmt.Sprintf("multiple devices available (%d); select one", len(e.Devices))
+}
+
 type Player struct {
 	Client *spotify.Client
 }
@@ -20,9 +35,11 @@ func New(client *spotify.Client) *Player {
 	return &Player{Client: client}
 }
 
-// EnsureDevice checks for an active Spotify device. If none is active, it
-// discovers available devices and either auto-selects (1 device) or prompts
-// the user to choose (2+ devices). Returns an error when no devices exist.
+// EnsureDevice confirms an active Spotify device exists. If none is
+// active and exactly one device is available, playback is transferred
+// to it automatically. With multiple available devices it returns
+// AmbiguousDeviceError carrying the list, so the caller can run a UI.
+// This function never reads stdin nor writes to stdout.
 func (p *Player) EnsureDevice(ctx context.Context) error {
 	state, err := p.PlayerState(ctx)
 	if err != nil {
@@ -41,25 +58,18 @@ func (p *Player) EnsureDevice(ctx context.Context) error {
 	case 0:
 		return errors.New("no devices found. Open Spotify on a device first")
 	case 1:
-		fmt.Printf("Transferring playback to %s...\n", devices[0].Name)
 		return p.Client.TransferPlayback(ctx, devices[0].ID, true)
 	default:
-		fmt.Println("Multiple devices found:")
-		for i, d := range devices {
-			fmt.Printf("  %d: %s (%s)\n", i+1, d.Name, d.Type)
-		}
-		fmt.Print("Select device number: ")
-		var choice int
-		if _, err := fmt.Scan(&choice); err != nil {
-			return fmt.Errorf("failed to read selection: %w", err)
-		}
-		if choice < 1 || choice > len(devices) {
-			return fmt.Errorf("invalid selection: %d", choice)
-		}
-		selected := devices[choice-1]
-		fmt.Printf("Transferring playback to %s...\n", selected.Name)
-		return p.Client.TransferPlayback(ctx, selected.ID, true)
+		return &AmbiguousDeviceError{Devices: devices}
 	}
+}
+
+// TransferPlayback moves active playback to the specified device.
+func (p *Player) TransferPlayback(ctx context.Context, deviceID spotify.ID) error {
+	if err := p.Client.TransferPlayback(ctx, deviceID, true); err != nil {
+		return fmt.Errorf("failed to transfer playback: %w", err)
+	}
+	return nil
 }
 
 func (p *Player) Play(ctx context.Context) error {
