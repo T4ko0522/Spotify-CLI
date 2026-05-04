@@ -22,7 +22,9 @@ var volumeCmd = &cobra.Command{
 		if err != nil || vol < 0 || vol > 100 {
 			return fmt.Errorf("volume must be a number between 0 and 100")
 		}
-		if err := spotifyPlayer.SetVolume(ctx, vol); err != nil {
+		if err := runWithDeviceSelection(ctx, spotifyPlayer, func() error {
+			return spotifyPlayer.SetVolume(ctx, vol)
+		}); err != nil {
 			return err
 		}
 		fmt.Printf("Volume: %d%%\n", vol)

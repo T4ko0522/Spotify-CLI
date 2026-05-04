@@ -13,7 +13,11 @@ var pauseCmd = &cobra.Command{
 	Aliases: []string{"s"},
 	Short:   "Pause playback",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := spotifyPlayer.Pause(cmd.Context()); err != nil {
+		ctx := cmd.Context()
+		err := runWithDeviceSelection(ctx, spotifyPlayer, func() error {
+			return spotifyPlayer.Pause(ctx)
+		})
+		if err != nil {
 			if errors.Is(err, player.ErrAlreadyPaused) {
 				fmt.Println("Already paused.")
 				return nil
