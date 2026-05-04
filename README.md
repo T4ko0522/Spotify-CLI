@@ -44,7 +44,7 @@
 **Scoop** (recommended — auto-update via `scoop update`):
 
 ```powershell
-scoop bucket add t4ko0522 https://github.com/T4ko0522/scoop-bucket
+scoop bucket add t4ko0522 https://github.com/T4ko0522/tap
 scoop install t4ko0522/spt
 ```
 
@@ -55,7 +55,7 @@ scoop install t4ko0522/spt
 **Homebrew** (recommended — auto-update via `brew upgrade`):
 
 ```bash
-brew tap t4ko0522/tap https://github.com/T4ko0522/homebrew-tap
+brew tap t4ko0522/tap https://github.com/T4ko0522/tap
 brew install spt
 ```
 

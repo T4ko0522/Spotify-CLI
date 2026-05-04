@@ -151,21 +151,23 @@ jobs:
           prerelease: false
           overwrite_files: true
 
-  bump-scoop:
+  bump-tap:
     needs: [version, release]
     permissions: {}
     timeout-minutes: 10
     runs-on: ubuntu-latest
     env:
       VERSION: ${{ needs.version.outputs.version }}
+      SHA_LINUX_AMD64: ${{ needs.release.outputs.sha_linux_amd64 }}
+      SHA_LINUX_ARM64: ${{ needs.release.outputs.sha_linux_arm64 }}
       SHA_WIN: ${{ needs.release.outputs.sha_windows_amd64 }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          repository: T4ko0522/scoop-bucket
+          repository: T4ko0522/tap
           token: ${{ secrets.BUCKET_TOKEN }}
 
-      - name: Update manifest
+      - name: Update Scoop manifest
         run: |
           VERSION_NO_V="${VERSION#v}"
           mkdir -p bucket
@@ -193,34 +195,7 @@ jobs:
           }
           EOF
 
-      - name: Commit and push
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add bucket/spt.json
-          if git diff --cached --quiet; then
-            echo "No changes to commit"
-            exit 0
-          fi
-          git commit -m "spt: ${VERSION}"
-          git push
-
-  bump-homebrew:
-    needs: [version, release]
-    permissions: {}
-    timeout-minutes: 10
-    runs-on: ubuntu-latest
-    env:
-      VERSION: ${{ needs.version.outputs.version }}
-      SHA_LINUX_AMD64: ${{ needs.release.outputs.sha_linux_amd64 }}
-      SHA_LINUX_ARM64: ${{ needs.release.outputs.sha_linux_arm64 }}
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          repository: T4ko0522/homebrew-tap
-          token: ${{ secrets.BUCKET_TOKEN }}
-
-      - name: Update formula
+      - name: Update Homebrew formula
         run: |
           VERSION_NO_V="${VERSION#v}"
           mkdir -p Formula
@@ -256,7 +231,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Formula/spt.rb
+          git add bucket/spt.json Formula/spt.rb
           if git diff --cached --quiet; then
             echo "No changes to commit"
             exit 0
