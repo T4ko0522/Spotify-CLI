@@ -41,9 +41,23 @@
 
 ### Windows
 
-[Release](https://github.com/T4ko0522/Spotify-CLI/releases) から `spt.msi` をダウンロードして実行してください。
+**Scoop**（推奨 — `scoop update` で自動更新）:
+
+```powershell
+scoop bucket add t4ko0522 https://github.com/T4ko0522/scoop-bucket
+scoop install t4ko0522/spt
+```
+
+**MSI インストーラー**: [Release](https://github.com/T4ko0522/Spotify-CLI/releases) から `spt.msi` をダウンロードして実行してください。
 
 ### Linux
+
+**Homebrew**（推奨 — `brew upgrade` で自動更新）:
+
+```bash
+brew tap t4ko0522/tap https://github.com/T4ko0522/homebrew-tap
+brew install spt
+```
 
 **ソースからビルド**（Go 1.25+ が必要）:
 

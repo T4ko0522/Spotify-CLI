@@ -41,9 +41,23 @@
 
 ### Windows
 
-Download `spt.msi` from [Releases](https://github.com/T4ko0522/Spotify-CLI/releases) and run it.
+**Scoop** (recommended — auto-update via `scoop update`):
+
+```powershell
+scoop bucket add t4ko0522 https://github.com/T4ko0522/scoop-bucket
+scoop install t4ko0522/spt
+```
+
+**MSI installer**: Download `spt.msi` from [Releases](https://github.com/T4ko0522/Spotify-CLI/releases) and run it.
 
 ### Linux
+
+**Homebrew** (recommended — auto-update via `brew upgrade`):
+
+```bash
+brew tap t4ko0522/tap https://github.com/T4ko0522/homebrew-tap
+brew install spt
+```
 
 **From source** (requires Go 1.25+):
 
