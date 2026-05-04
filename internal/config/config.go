@@ -115,21 +115,82 @@ func SaveSettings(imgSize string) error {
 		return err
 	}
 
-	var cfg configData
-	if data, err := os.ReadFile(path); err == nil {
-		_ = json.Unmarshal(data, &cfg)
+	// Read-modify-write must surface errors; previously a missing or
+	// corrupt file silently produced a zero-value cfg, which then wrote
+	// back an empty client_id and forced the user to re-run `spt init`.
+	cfg, err := readConfig(path)
+	if err != nil {
+		return err
 	}
-
 	cfg.ImgSize = imgSize
 
+	if err := writeConfigAtomic(path, cfg); err != nil {
+		return err
+	}
+
+	applyPreset(imgSize)
+	return nil
+}
+
+// readConfig loads the on-disk config. A missing file is treated as an
+// empty config so first-time writers can compose one. Any other I/O or
+// parse error is returned to the caller.
+func readConfig(path string) (configData, error) {
+	var cfg configData
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return cfg, nil
+		}
+		return cfg, fmt.Errorf("cannot read config file: %w", err)
+	}
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return cfg, fmt.Errorf("corrupt config file at %s: %w", path, err)
+	}
+	return cfg, nil
+}
+
+// writeConfigAtomic writes cfg to path using a sibling temp file and a
+// rename, so concurrent readers never see a partially-written file and
+// a crash mid-write cannot leave the config truncated.
+func writeConfigAtomic(path string, cfg configData) error {
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return fmt.Errorf("cannot marshal config: %w", err)
 	}
-	if err := os.WriteFile(path, data, 0600); err != nil {
-		return fmt.Errorf("cannot write config file: %w", err)
+
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, "config-*.json.tmp")
+	if err != nil {
+		return fmt.Errorf("cannot create temp config file: %w", err)
+	}
+	tmpPath := tmp.Name()
+	committed := false
+	defer func() {
+		if !committed {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("cannot write temp config file: %w", err)
+	}
+	if err := tmp.Chmod(0600); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("cannot chmod temp config file: %w", err)
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("cannot fsync temp config file: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("cannot close temp config file: %w", err)
 	}
 
-	applyPreset(imgSize)
+	if err := os.Rename(tmpPath, path); err != nil {
+		return fmt.Errorf("cannot rename config file: %w", err)
+	}
+	committed = true
 	return nil
 }
