@@ -3,9 +3,9 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/T4ko0522/spotify-cli/internal/config"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/T4ko0522/spotify-cli/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -82,35 +82,33 @@ func (m settingsModel) View() string {
 	return s
 }
 
-var settingsCmd = &cobra.Command{
-	Use:   "settings",
-	Short: "Interactively change TUI settings",
-	Long:  "Interactively change TUI image size preset.",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		_ = config.Load()
+func (a *App) newSettingsCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "settings",
+		Short: "Interactively change TUI settings",
+		Long:  "Interactively change TUI image size preset.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			_ = config.Load()
 
-		m := newSettingsModel()
-		p := tea.NewProgram(m)
-		result, err := p.Run()
-		if err != nil {
-			return err
-		}
+			m := newSettingsModel()
+			p := tea.NewProgram(m)
+			result, err := p.Run()
+			if err != nil {
+				return err
+			}
 
-		final := result.(settingsModel)
-		if final.err != nil {
-			return fmt.Errorf("failed to save settings: %w", final.err)
-		}
-		if final.saved {
-			selected := config.ImgSizeNames[final.cursor]
-			preset := config.ImgSizePresets[selected]
-			fmt.Printf("Settings saved: %s (%dx%d)\n", selected, preset.Cols, preset.Rows)
-		} else {
-			fmt.Println("No changes.")
-		}
-		return nil
-	},
-}
-
-func init() {
-	rootCmd.AddCommand(settingsCmd)
+			final := result.(settingsModel)
+			if final.err != nil {
+				return fmt.Errorf("failed to save settings: %w", final.err)
+			}
+			if final.saved {
+				selected := config.ImgSizeNames[final.cursor]
+				preset := config.ImgSizePresets[selected]
+				fmt.Printf("Settings saved: %s (%dx%d)\n", selected, preset.Cols, preset.Rows)
+			} else {
+				fmt.Println("No changes.")
+			}
+			return nil
+		},
+	}
 }

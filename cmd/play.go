@@ -8,27 +8,25 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var playCmd = &cobra.Command{
-	Use:     "play",
-	Aliases: []string{"p"},
-	Short:   "Resume playback",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		ctx := cmd.Context()
-		err := runWithDeviceSelection(ctx, spotifyPlayer, func() error {
-			return spotifyPlayer.Play(ctx)
-		})
-		if err != nil {
-			if errors.Is(err, player.ErrAlreadyPlaying) {
-				fmt.Println("Already playing.")
-				return nil
+func (a *App) newPlayCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:     "play",
+		Aliases: []string{"p"},
+		Short:   "Resume playback",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			err := runWithDeviceSelection(ctx, a.player, func() error {
+				return a.player.Play(ctx)
+			})
+			if err != nil {
+				if errors.Is(err, player.ErrAlreadyPlaying) {
+					fmt.Println("Already playing.")
+					return nil
+				}
+				return err
 			}
-			return err
-		}
-		fmt.Println("Playback resumed.")
-		return nil
-	},
-}
-
-func init() {
-	rootCmd.AddCommand(playCmd)
+			fmt.Println("Playback resumed.")
+			return nil
+		},
+	}
 }
