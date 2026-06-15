@@ -18,17 +18,26 @@
         "x86_64-linux"
       ];
       forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
-      pkgsFor = system: import nixpkgs { inherit system; };
+      pkgsFor =
+        system:
+        import nixpkgs {
+          inherit system;
+          overlays = [ self.overlays.default ];
+        };
     in
     {
+      overlays.default = final: _prev: {
+        spotify-cli = final.callPackage ./package.nix { };
+      };
+
       packages = forAllSystems (
         system:
         let
           pkgs = pkgsFor system;
         in
         {
-          default = pkgs.callPackage ./package.nix { };
-          spotify-cli = self.packages.${system}.default;
+          default = pkgs.spotify-cli;
+          spotify-cli = pkgs.spotify-cli;
         }
       );
 
